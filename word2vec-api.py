@@ -17,6 +17,11 @@ import argparse
 import base64
 import sys
 
+from IPython import embed
+
+# Proprietary classes
+from dictionary import Dictionary
+
 parser = reqparse.RequestParser()
 
 
@@ -24,6 +29,27 @@ def filter_words(words):
     if words is None:
         return
     return [word for word in words if word in model.vocab]
+
+
+class N_SimilarWords(Resource):
+  def get(self):
+      # PARAMS:
+      # required: phrase
+      # optional: min_gram, max_gram, topn
+      embed()
+      parser = reqparse.RequestParser()
+      parser.add_argument('phrase', type=str, required=True, help='Phrase parameter cannot be blank!')
+      parser.add_argument('topn', type=int, default=100, help='topn must be int!')
+      args = parser.parse_args()
+
+      dic = Dictionary([args.phrase], word2vec_model=model)
+      phrase = args.phrase.replace(' ', '_')
+      key_obj = dic.vocab()[phrase]
+      if (key_obj.is_vectorized == False):
+        return {'error': 'Could not vectorize phrase'}
+
+      vec = key_obj.vector
+      return model.similar_by_vector(vec, topn=args.topn)
 
 
 class N_Similarity(Resource):
@@ -118,10 +144,13 @@ if __name__ == '__main__':
     port = int(args.port) if args.port else 5000
     if not args.model:
         print "Usage: word2vec-apy.py --model path/to/the/model [--host host --port 1234]"
+
     model = w.load_word2vec_format(model_path, binary=binary)
     api.add_resource(N_Similarity, path+'/n_similarity')
     api.add_resource(Similarity, path+'/similarity')
     api.add_resource(MostSimilar, path+'/most_similar')
     api.add_resource(Model, path+'/model')
     api.add_resource(ModelWordSet, '/word2vec/model_word_set')
+    api.add_resource(N_SimilarWords, path + '/n_most_similar')
+
     app.run(host=host, port=port)
