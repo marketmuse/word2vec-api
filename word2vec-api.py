@@ -36,7 +36,6 @@ class N_SimilarWords(Resource):
       # PARAMS:
       # required: phrase
       # optional: min_gram, max_gram, topn
-      embed()
       parser = reqparse.RequestParser()
       parser.add_argument('phrase', type=str, required=True, help='Phrase parameter cannot be blank!')
       parser.add_argument('topn', type=int, default=100, help='topn must be int!')
@@ -46,10 +45,36 @@ class N_SimilarWords(Resource):
       phrase = args.phrase.replace(' ', '_')
       key_obj = dic.vocab()[phrase]
       if (key_obj.is_vectorized == False):
-        return {'error': 'Could not vectorize phrase'}
+        err_msg = 'Could not vectorize phrase because of the following words: %s' % key_obj.partial_keyword_fails
+        return {'error': err_msg, 'words': key_obj.partial_keyword_fails}
 
       vec = key_obj.vector
-      return model.similar_by_vector(vec, topn=args.topn)
+      return {'result': model.similar_by_vector(vec, topn=args.topn)}
+
+
+class Similarity_V2(Resource):
+    def get(self):
+        #embed()
+        parser = reqparse.RequestParser()
+        parser.add_argument('w1', type=str, required=True, help="Word 1 cannot be blank!")
+        parser.add_argument('w2', type=str, required=True, help="Word 2 cannot be blank!")
+        parser.add_argument('topn', type=int, default=100, help='topn must be int!')
+
+        args = parser.parse_args()
+
+        dic = Dictionary([args.w1, args.w2], word2vec_model=model)
+
+        # check if every word got vectorized
+        # TODO: do this more elegantly
+        for k,v in dic.vocab().iteritems():
+          if (v.is_vectorized == False):
+            return 0
+
+        vecs = [v.vector for k,v in dic.vocab().iteritems()]
+
+        similarity = dot(matutils.unitvec(vecs[0]), matutils.unitvec(vecs[1]))
+
+        return similarity
 
 
 class N_Similarity(Resource):
@@ -152,5 +177,6 @@ if __name__ == '__main__':
     api.add_resource(Model, path+'/model')
     api.add_resource(ModelWordSet, '/word2vec/model_word_set')
     api.add_resource(N_SimilarWords, path + '/n_most_similar')
+    api.add_resource(Similarity_V2, path+'/similarity_v2')
 
     app.run(host=host, port=port)

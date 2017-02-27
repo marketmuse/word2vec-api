@@ -131,7 +131,7 @@ class Dictionary(Mapping):
     self.fails = []
     for idx, keyword in enumerate(keywords):
       #print idx
-      vector, success, direct_hit, partial_keywords = self.create_vector(keyword)
+      vector, success, direct_hit, partial_keywords, partial_fails = self.create_vector(keyword)
       if (success != True):
         vector = None
         self.fails.append(keyword)
@@ -144,10 +144,10 @@ class Dictionary(Mapping):
         #print self.stds.transform([vector])[0][0].__class__
         #print self.stds.transform([vector])[0][0]
 
-      keyword_obj = Keyword(keyword, vector, partial_keywords, direct_hit, is_vectorized=success)
+      keyword_obj = Keyword(keyword, vector, partial_keywords, direct_hit, partial_fails, is_vectorized=success)
       self.id2keyword[idx] = keyword_obj
       self.str2keyword[keyword] = keyword_obj
-    pprint(self.fails)
+    #pprint(self.fails)
 
 
   # Returns vectors, success (Boolean)
@@ -157,6 +157,7 @@ class Dictionary(Mapping):
     #self.stds.fit_transform(self.word2vec_model.vocab[keyword])
     direct_hit = False
     partial_keywords = {}
+    fails = []
     try:
       #print 'direct'
       #print self.word2vec_model[keyword][0].__class__
@@ -207,14 +208,18 @@ class Dictionary(Mapping):
                       #'count': google.vocab[str(doc.sents.next().lemma_).replace(' ', '_')].count
                     #}
                   except KeyError:
+                    if (repeat == 1):
+                      #print 'grams: %s' % grams
+                      fails.append(grams[0])
                     pass
+
                   except UnicodeDecodeError:
                     print grams
             repeat = repeat - 1
 
           # check if there was a vector found for each word
           if (keyword_length != len(list(set([int(idx) for idx_string in vecs.keys() for idx in idx_string.split('_')])))):
-            return None, False, direct_hit, partial_keywords
+            return None, False, direct_hit, partial_keywords, fails
 
           # Calculate weighted average of vectors
           # start with longest ngrams found
@@ -240,6 +245,6 @@ class Dictionary(Mapping):
               partial_keywords[partial_keyword] = vecs[key]
 
           weighted_middle_vector = np.average(np.array(final_vecs), axis=0, weights=vec_weights)
-          return weighted_middle_vector, True, direct_hit, partial_keywords
+          return weighted_middle_vector, True, direct_hit, partial_keywords, fails
       except KeyError:
-        return None, False, direct_hit, partial_keywords
+        return None, False, direct_hit, partial_keywords, fails
