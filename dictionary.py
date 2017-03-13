@@ -14,6 +14,7 @@ from pprint import pprint
 import spacy
 import re
 from operator import itemgetter
+from IPython import embed
 
 
 nlp = spacy.en.English()
@@ -22,7 +23,7 @@ class Dictionary(Mapping):
   def __init__(self, keywords, word2vec_model=None,  adjective_weights=False, batch_size=90000):
     assert type(keywords) is list, 'keywords must be a list of keyword strings'
 
-    keywords = [re.sub(' +',' ', key).replace(" ", "_") for key in keywords]
+    keywords = [re.sub(' +',' ', key).replace('.', ' ').replace(" ", "_") for key in keywords]
 
     self.nlp = nlp
     self.batch_size = batch_size
@@ -155,6 +156,10 @@ class Dictionary(Mapping):
     #print keyword
     #print self.word2vec_model.vocab[keyword]
     #self.stds.fit_transform(self.word2vec_model.vocab[keyword])
+    # Very dirty checking for "to" and "a", since they are not in the google
+    #original_keyword = keyword
+    keyword = re.sub(' a ',' ', keyword)
+    keyword = re.sub(' to ',' ', keyword)
     direct_hit = False
     partial_keywords = {}
     fails = []
