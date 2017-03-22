@@ -17,6 +17,9 @@ import argparse
 import base64
 import sys
 
+import gensim
+from gensim.models.wrappers import fasttext
+
 from IPython import embed
 
 # Proprietary classes
@@ -58,7 +61,7 @@ class Similarity_V2(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('w1', type=str, required=True, help="Word 1 cannot be blank!")
         parser.add_argument('w2', type=str, required=True, help="Word 2 cannot be blank!")
-        parser.add_argument('topn', type=int, default=100, help='topn must be int!')
+        #parser.add_argument('topn', type=int, default=100, help='topn must be int!')
 
         args = parser.parse_args()
 
@@ -68,7 +71,12 @@ class Similarity_V2(Resource):
         # TODO: do this more elegantly
         for k,v in dic.vocab().iteritems():
           if (v.is_vectorized == False):
-            return 0
+            # Try the facebook model
+            dic = Dictionary([args.w1, args.w2], word2vec_model=facebook_model)
+
+            for k,v in dic.vocab().iteritems():
+              if (v.is_vectorized == False):
+                return 0
 
         vecs = [v.vector for k,v in dic.vocab().iteritems()]
 
@@ -156,6 +164,7 @@ if __name__ == '__main__':
     #----------- Parsing Arguments ---------------
     p = argparse.ArgumentParser()
     p.add_argument("--model", help="Path to the trained model")
+    p.add_argument("--second_model", help="Path to the second trained model")
     p.add_argument("--binary", help="Specifies the loaded model is binary")
     p.add_argument("--host", help="Host name (default: localhost)")
     p.add_argument("--port", help="Port (default: 5000)")
@@ -168,9 +177,18 @@ if __name__ == '__main__':
     path = args.path if args.path else "/word2vec"
     port = int(args.port) if args.port else 5000
     if not args.model:
-        print "Usage: word2vec-apy.py --model path/to/the/model [--host host --port 1234]"
+        print "Usage: word2vec-apy.py --model path/to/the/model --second_model path/to/the/model [--host host --port 1234]"
 
-    model = w.load_word2vec_format(model_path, binary=binary)
+    if not args.second_model:
+        print "Usage: word2vec-apy.py --model path/to/the/model --second_model path/to/the/model [--host host --port 1234]"
+
+
+    model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=binary)
+    # Load facebook model as fallback
+    print 'loading facebook model...take a cup of coffee or two...really!'
+    facebook_model = gensim.models.KeyedVectors.load_word2vec_format(args.second_model, binary=False)
+    #facebook_model = fasttext.FastText.load_fasttext_format(args.second_model)
+
     api.add_resource(N_Similarity, path+'/n_similarity')
     api.add_resource(Similarity, path+'/similarity')
     api.add_resource(MostSimilar, path+'/most_similar')

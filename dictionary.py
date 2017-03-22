@@ -23,7 +23,7 @@ class Dictionary(Mapping):
   def __init__(self, keywords, word2vec_model=None,  adjective_weights=False, batch_size=90000):
     assert type(keywords) is list, 'keywords must be a list of keyword strings'
 
-    keywords = [re.sub(' +',' ', key).replace('.', ' ').replace(" ", "_") for key in keywords]
+    keywords = [re.sub(' +',' ', key).replace(" ", "_") for key in keywords]
 
     self.nlp = nlp
     self.batch_size = batch_size
@@ -158,8 +158,18 @@ class Dictionary(Mapping):
     #self.stds.fit_transform(self.word2vec_model.vocab[keyword])
     # Very dirty checking for "to" and "a", since they are not in the google
     #original_keyword = keyword
+    print 'Before filtering: %s' % keyword
+
     keyword = re.sub(' a ',' ', keyword)
     keyword = re.sub(' to ',' ', keyword)
+    keyword = re.sub('_a_','_', keyword)
+    keyword = re.sub('_to_','_', keyword)
+    keyword = re.sub('-','_', keyword)
+
+    keyword = keyword.lower()
+
+    print 'After filtering: %s' % keyword
+
     direct_hit = False
     partial_keywords = {}
     fails = []
@@ -171,7 +181,7 @@ class Dictionary(Mapping):
       partial_keywords[keyword] = vector
       direct_hit = True
       self.direct_hits_counter += 1
-      return vector, True, direct_hit, partial_keywords
+      return vector, True, direct_hit, partial_keywords, []
     except KeyError:
       try:
         # adjective_weights is broken and should be removed
@@ -201,10 +211,16 @@ class Dictionary(Mapping):
                   idx_string = '_'.join([str(unigrams.index(uni)) for uni in grams])
                   vecs[idx_string] = self.word2vec_model['_'.join(grams)]
                 except KeyError:
+                  # Try lemma_
                   try:
                     print grams
+                    print 'Lemma:'
+
                     doc = self.nlp( unicode(' '.join(grams)) )
-                    vecs[idx_string] = self.word2vec_model[str(doc.sents.next().lemma_)]
+                    lemma = doc.sents.next().lemma_
+
+                    print lemma
+                    vecs[idx_string] = self.word2vec_model[str(lemma)]
                     #print 'success lemma'
 
                     #{
@@ -213,15 +229,27 @@ class Dictionary(Mapping):
                       #'count': google.vocab[str(doc.sents.next().lemma_).replace(' ', '_')].count
                     #}
                   except KeyError:
-                    if (repeat == 1):
-                      #print 'grams: %s' % grams
-                      fails.append(grams[0])
-                    pass
+                    # try uppercase first letters
+                    try:
+                      print 'Uppercase'
+                      print grams
+                      print '_'.join([gram.capitalize() for gram in grams])
+                      vecs[idx_string] = self.word2vec_model['_'.join([gram.capitalize() for gram in grams])]
+                    except KeyError:
+                      # try uppercase all letters
+                      try:
+                        print '_'.join([gram.upper() for gram in grams])
+                        vecs[idx_string] = self.word2vec_model['_'.join([gram.upper() for gram in grams])]
 
-                  except UnicodeDecodeError:
-                    print grams
+                      except KeyError:
+                        if (repeat == 1):
+                          #print 'grams: %s' % grams
+                          fails.append('_'.join(grams))
+                        pass
+
             repeat = repeat - 1
 
+          print vecs.keys()
           # check if there was a vector found for each word
           if (keyword_length != len(list(set([int(idx) for idx_string in vecs.keys() for idx in idx_string.split('_')])))):
             return None, False, direct_hit, partial_keywords, fails
