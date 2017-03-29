@@ -4,7 +4,7 @@
 from __future__ import division
 import numpy as np
 from collections import Mapping
-# from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler
 from itertools import combinations
 import kw
 reload(kw)
@@ -23,8 +23,6 @@ class Dictionary(Mapping):
   def __init__(self, keywords, word2vec_model=None,  adjective_weights=False, batch_size=90000):
     assert type(keywords) is list, 'keywords must be a list of keyword strings'
 
-    keywords = [re.sub(' +',' ', key).replace(" ", "_") for key in keywords]
-
     self.nlp = nlp
     self.batch_size = batch_size
     self.total_population = len(keywords)
@@ -37,7 +35,7 @@ class Dictionary(Mapping):
     self.str2keyword = {}
 
     self.word2vec_model = word2vec_model
-    #self.stds = StandardScaler()
+    self.stds = StandardScaler()
     self.adjective_weights = adjective_weights
 
     # debug
@@ -158,17 +156,26 @@ class Dictionary(Mapping):
     #self.stds.fit_transform(self.word2vec_model.vocab[keyword])
     # Very dirty checking for "to" and "a", since they are not in the google
     #original_keyword = keyword
-    print 'Before filtering: %s' % keyword
+    #print 'Before filtering: %s' % keyword
 
-    keyword = re.sub(' a ',' ', keyword)
-    keyword = re.sub(' to ',' ', keyword)
-    keyword = re.sub('_a_','_', keyword)
-    keyword = re.sub('_to_','_', keyword)
-    keyword = re.sub('-','_', keyword)
+    keyword = re.sub(' a ', ' ', keyword)
+    keyword = re.sub(' to ', ' ', keyword)
+    keyword = re.sub('_a_', '_', keyword)
+    keyword = re.sub('_to_', '_', keyword)
+    keyword = re.sub('_-', ' ', keyword)
+    keyword = re.sub(' -', ' ', keyword)
+    keyword = re.sub('- ', ' ', keyword)
+    keyword = re.sub('-_', ' ', keyword)
+    keyword = re.sub(' - ', ' ', keyword)
+    keyword = re.sub('_-_', ' ', keyword)
+    keyword = re.sub('-', ' ', keyword)
+    keyword = keyword.strip()
+    keyword = re.sub(' +',' ', keyword)
+    keyword = re.sub(' ','_', keyword)
 
     keyword = keyword.lower()
 
-    print 'After filtering: %s' % keyword
+    #print 'After filtering: %s' % keyword
 
     direct_hit = False
     partial_keywords = {}
@@ -213,13 +220,13 @@ class Dictionary(Mapping):
                 except KeyError:
                   # Try lemma_
                   try:
-                    print grams
-                    print 'Lemma:'
+                    #print grams
+                    #print 'Lemma:'
 
                     doc = self.nlp( unicode(' '.join(grams)) )
                     lemma = doc.sents.next().lemma_
 
-                    print lemma
+                    #print lemma
                     vecs[idx_string] = self.word2vec_model[str(lemma)]
                     #print 'success lemma'
 
@@ -231,14 +238,14 @@ class Dictionary(Mapping):
                   except KeyError:
                     # try uppercase first letters
                     try:
-                      print 'Uppercase'
-                      print grams
-                      print '_'.join([gram.capitalize() for gram in grams])
+                      #print 'Uppercase'
+                      #print grams
+                      #print '_'.join([gram.capitalize() for gram in grams])
                       vecs[idx_string] = self.word2vec_model['_'.join([gram.capitalize() for gram in grams])]
                     except KeyError:
                       # try uppercase all letters
                       try:
-                        print '_'.join([gram.upper() for gram in grams])
+                        #print '_'.join([gram.upper() for gram in grams])
                         vecs[idx_string] = self.word2vec_model['_'.join([gram.upper() for gram in grams])]
 
                       except KeyError:
@@ -249,7 +256,7 @@ class Dictionary(Mapping):
 
             repeat = repeat - 1
 
-          print vecs.keys()
+          #print vecs.keys()
           # check if there was a vector found for each word
           if (keyword_length != len(list(set([int(idx) for idx_string in vecs.keys() for idx in idx_string.split('_')])))):
             return None, False, direct_hit, partial_keywords, fails

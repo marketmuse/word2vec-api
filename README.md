@@ -2,39 +2,29 @@ word2vec-api
 ============
 
 Simple web service providing a word embedding API. The methods are based on Gensim Word2Vec implementation. Models are passed as parameters and must be in the Word2Vec text or binary format.
-* Install Depenencies   
+* Install Depenencies
 ```
 pip2 install -r requirements.txt
 ```
 
 * Launching the service
 ```
-python word2vec-api --model path/to/the/model [--host host --port 1234]
+python word2vec-api --model path/to/the/model --second_model path/to/the/second_model [--host host --port 1234]
 ```
-or   
+or
 ```
-python word2vec-api.py --model /path/to/GoogleNews-vectors-negative300.bin --binary BINARY --path /word2vec --host 0.0.0.0 --port 5000
-```
-
-
-
-* Example calls
-```
-curl http://127.0.0.1:5000/word2vec/n_similarity?ws1=Sushi&ws1=Shop&ws2=Japanese&ws2=Restaurant
-curl http://127.0.0.1:5000/word2vec/similarity?w1=Sushi&w2=Japanese
-curl http://127.0.0.1:5000/word2vec/most_similar?positive=indian&positive=food[&negative=][&topn=]
-curl http://127.0.0.1:5000/word2vec/model?word=restaurant
-curl http://127.0.0.1:5000/word2vec/model_word_set
+python word2vec-api.py --model /home/ubuntu/data/models/GoogleNews-vectors-negative300.bin --second_model /home/ubuntu/data/models/wiki.en.vec --binary BINARY --path /word2vec --host 0.0.0.0 --port 80
 ```
 
-Note: The "model" method returns a base64 encoding of the vector. "model\_word\_set" returns a base64 encoded pickle of the model's vocabulary. 
+
+Note: The "model" method returns a base64 encoding of the vector. "model\_word\_set" returns a base64 encoded pickle of the model's vocabulary.
 
 ## Where to get a pretrained model
 
-In case you do not have domain specific data to train, it can be convenient to use a pretrained model. 
+In case you do not have domain specific data to train, it can be convenient to use a pretrained model.
 Please feel free to submit additions to this list through a pull request.
- 
- 
+
+
 | Model file | Number of dimensions | Corpus (size)| Vocabulary size | Author | Architecture | Training Algorithm | Context window - size | Web page |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Google News](https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/) | 300 |Google News (100B) | 3M | Google | word2vec | negative sampling | BoW - ~5| [link](http://code.google.com/p/word2vec/) |

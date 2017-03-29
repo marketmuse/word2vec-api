@@ -27,6 +27,22 @@ from dictionary import Dictionary
 
 parser = reqparse.RequestParser()
 
+class InvalidUsage(Exception):
+    status_code = 400
+
+    def __init__(self, message, status_code=None, payload=None):
+        Exception.__init__(self)
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        rv = dict(self.payload or ())
+        rv['message'] = self.message
+        return rv
+
+
 
 def filter_words(words):
     if words is None:
@@ -83,6 +99,86 @@ class Similarity_V2(Resource):
         similarity = dot(matutils.unitvec(vecs[0]), matutils.unitvec(vecs[1]))
 
         return similarity
+
+
+class Similarity_batch(Resource):
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('main_keyword', type=str, required=True, help="Word 1 cannot be blank!")
+        parser.add_argument('keywords', type=str, action='append', required=True, help="keywwords must be a list of words!")
+        #parser.add_argument('topn', type=int, default=100, help='topn must be int!')
+
+        args = parser.parse_args()
+
+        keywords = [args.main_keyword]
+        keywords.extend(args.keywords)
+
+        dic = Dictionary(keywords, word2vec_model=model)
+
+        # get not vectorized keyword
+        unvectorized_keywords = [key for key, key_obj in dic.vocab().iteritems() if key_obj.vector == None]
+        second_unvectorized_keywords = []
+
+        # if the main topic cannot be detected, try the facebook model immediately
+        if args.main_keyword in unvectorized_keywords:
+          second_dic = Dictionary(keywords, word2vec_model=facebook_model)
+          second_unvectorized_keywords = [key for key, key_obj in second_dic.vocab().iteritems() if key_obj.vector == None]
+
+        elif len(unvectorized_keywords) > 0:
+          # try with facebook
+          second_dic_keywords = [key for key in unvectorized_keywords]
+
+          if args.main_keyword not in unvectorized_keywords:
+            second_dic_keywords.append(args.main_keyword)
+
+          second_dic = Dictionary(second_dic_keywords, word2vec_model=facebook_model)
+          second_unvectorized_keywords = [key for key, key_obj in second_dic.vocab().iteritems() if key_obj.vector == None]
+
+        # check here if the main topic could be vectorized, if not, return with error
+        if args.main_keyword in unvectorized_keywords:
+          dic_ok = False
+        else:
+          dic_ok = True
+
+        if args.main_keyword in second_unvectorized_keywords:
+          second_dic_ok = False
+        else:
+          second_dic_ok = True
+
+        # If none of the models has the vector of the main topic, abort
+        if dic_ok == False and second_dic_ok == False:
+          raise InvalidUsage('No vector could be build for the main keyword: %s' % args.main_keyword, status_code=400)
+
+
+
+        vecs = {}
+
+        if dic_ok == True:
+          vecs['dic'] = {}
+          for key, key_obj in dic.vocab().iteritems():
+            if key_obj.vector != None:
+              vecs['dic'][key] = key_obj.vector
+
+
+        if 'second_dic' in locals() and second_dic_ok == True:
+          vecs['second_dic'] = {}
+          for key, key_obj in second_dic.vocab().iteritems():
+              if key_obj.vector != None:
+                vecs['second_dic'][key] = key_obj.vector
+
+
+        result = { 'semantic_similarity_scores': {},
+                   'main_keyword': args.main_keyword,
+                   'fails': second_unvectorized_keywords
+                 }
+
+        for dic, dic_data in vecs.iteritems():
+          for key, vector in dic_data.iteritems():
+            if key != args.main_keyword:
+              sim = dot(matutils.unitvec(vector), matutils.unitvec(dic_data[args.main_keyword]))
+              result['semantic_similarity_scores'][key] = sim
+
+        return jsonify(result)
 
 
 class N_Similarity(Resource):
@@ -150,16 +246,44 @@ class ModelWordSet(Resource):
 app = Flask(__name__)
 api = Api(app)
 
+#app.config['TRAP_HTTP_EXCEPTIONS']=True
+#
+#@app.errorhandler(Exception)
+#def handle_error(e):
+    #try:
+        #if e.code == 400:
+            #print '400 error code'
+            #response = jsonify(error.to_dict())
+            #response.status_code = error.status_code
+            #return response
+        #elif e.code == 404:
+            #return make_error_page("Page Not Found", "The page you're looking for was not found"), 404
+        #raise e
+    #except:
+        #print '500 error'
+        #return flask.Response.force_type(e, flask.request.environ)
+
+@app.errorhandler(InvalidUsage)
+def handle_invalid_usage(error):
+    print 'inside handle_invalid_usage'
+    response = jsonify(error.to_dict())
+    response.status_code = error.status_code
+    return response
+
 @app.errorhandler(404)
 def pageNotFound(error):
     return "page not found"
 
 @app.errorhandler(500)
 def raiseError(error):
+    print 'inside raiseError'
     return error
 
 if __name__ == '__main__':
     global model
+
+    #app.config['TRAP_HTTP_EXCEPTIONS']=True
+    #app.register_error_handler(Exception, defaultHandler)
 
     #----------- Parsing Arguments ---------------
     p = argparse.ArgumentParser()
@@ -196,5 +320,6 @@ if __name__ == '__main__':
     api.add_resource(ModelWordSet, '/word2vec/model_word_set')
     api.add_resource(N_SimilarWords, path + '/n_most_similar')
     api.add_resource(Similarity_V2, path+'/similarity_v2')
+    api.add_resource(Similarity_batch, path+'/similarity_batch')
 
     app.run(host=host, port=port)
