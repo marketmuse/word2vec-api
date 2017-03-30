@@ -112,15 +112,15 @@ def main_keyword_found_in_both():
 def main_keyword_found_in_none():
   r = requests.post(URL, data= { 'main_keyword': nor_google_facebook_main_keyword, 'keywords': keywords_50})
 
-  assert r.status_code == 400, "status code should be 400"
+  assert r.status_code == 204, "status code should be 204"
 
   return r
 
 
-keyword_500_fail_test()
-keyword_500_test()
-all_keywords_found_in_google()
-main_keyword_only_found_in_google()
-main_keyword_only_found_in_facebook()
-main_keyword_found_in_both()
+#keyword_500_fail_test()
+#keyword_500_test()
+#all_keywords_found_in_google()
+#main_keyword_only_found_in_google()
+#main_keyword_only_found_in_facebook()
+#main_keyword_found_in_both()
 main_keyword_found_in_none()

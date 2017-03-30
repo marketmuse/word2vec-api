@@ -25,6 +25,14 @@ from IPython import embed
 # Proprietary classes
 from dictionary import Dictionary
 
+from werkzeug.exceptions import abort
+
+
+# Flask hotfix from here: https://github.com/pallets/flask/issues/941
+import flask
+from werkzeug.exceptions import default_exceptions
+
+
 parser = reqparse.RequestParser()
 
 class InvalidUsage(Exception):
@@ -73,7 +81,6 @@ class N_SimilarWords(Resource):
 
 class Similarity_V2(Resource):
     def get(self):
-        #embed()
         parser = reqparse.RequestParser()
         parser.add_argument('w1', type=str, required=True, help="Word 1 cannot be blank!")
         parser.add_argument('w2', type=str, required=True, help="Word 2 cannot be blank!")
@@ -147,9 +154,10 @@ class Similarity_batch(Resource):
 
         # If none of the models has the vector of the main topic, abort
         if dic_ok == False and second_dic_ok == False:
-          raise InvalidUsage('No vector could be build for the main keyword: %s' % args.main_keyword, status_code=400)
-
-
+          #raise InvalidUsage('No vector could be build for the main keyword: %s' % args.main_keyword, status_code=400)
+          #raise werkzeug.exceptions.NotFound('nah')
+          #abort(404)
+          return ('', 204)
 
         vecs = {}
 
@@ -246,6 +254,7 @@ class ModelWordSet(Resource):
 app = Flask(__name__)
 api = Api(app)
 
+
 #app.config['TRAP_HTTP_EXCEPTIONS']=True
 #
 #@app.errorhandler(Exception)
@@ -263,21 +272,37 @@ api = Api(app)
         #print '500 error'
         #return flask.Response.force_type(e, flask.request.environ)
 
-@app.errorhandler(InvalidUsage)
-def handle_invalid_usage(error):
-    print 'inside handle_invalid_usage'
-    response = jsonify(error.to_dict())
-    response.status_code = error.status_code
-    return response
+#@app.errorhandler(InvalidUsage)
+#def handle_invalid_usage(error):
+    #print 'inside handle_invalid_usage'
+    #response = jsonify(error.to_dict())
+    #response.status_code = error.status_code
+    #return response
+#
+#@app.errorhandler(404)
+#def pageNotFound(error):
+    #return "page not found"
+#
+#@app.errorhandler(500)
+#def raiseError(error):
+    #print 'inside raiseError'
+    #return error
 
-@app.errorhandler(404)
-def pageNotFound(error):
-    return "page not found"
+def _handle_http_exception(error):
+    print 'enters _handle_http_exception'
+    if flask.request.is_json:
+        return jsonify({
+            'status_code': error.code,
+            'message': str(error),
+            'description': error.description
+        }), error.code
+    raise error.get_response()
 
-@app.errorhandler(500)
-def raiseError(error):
-    print 'inside raiseError'
-    return error
+
+# Flask fix: https://github.com/pallets/flask/issues/941
+for code, ex in default_exceptions.iteritems():
+    app.errorhandler(code)(_handle_http_exception)
+
 
 if __name__ == '__main__':
     global model
@@ -308,10 +333,11 @@ if __name__ == '__main__':
 
 
     model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=binary)
+    #model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=False) #dev
     # Load facebook model as fallback
     print 'loading facebook model...take a cup of coffee or two...really!'
     facebook_model = gensim.models.KeyedVectors.load_word2vec_format(args.second_model, binary=False)
-    #facebook_model = fasttext.FastText.load_fasttext_format(args.second_model)
+    #facebook_model = gensim.models.KeyedVectors.load_word2vec_format(args.second_model, binary=False)  # dev
 
     api.add_resource(N_Similarity, path+'/n_similarity')
     api.add_resource(Similarity, path+'/similarity')
