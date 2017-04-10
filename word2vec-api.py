@@ -120,6 +120,11 @@ class Similarity_batch(Resource):
         keywords = [args.main_keyword]
         keywords.extend(args.keywords)
 
+        # check if main_keyword is also inside the keywords
+        addMainKeywordToSimMap = False
+        if args.main_keyword in args.keywords:
+          addMainKeywordToSimMap = True
+
         dic = Dictionary(keywords, word2vec_model=model)
 
         # get not vectorized keyword
@@ -185,6 +190,11 @@ class Similarity_batch(Resource):
             if key != args.main_keyword:
               sim = dot(matutils.unitvec(vector), matutils.unitvec(dic_data[args.main_keyword]))
               result['semantic_similarity_scores'][key] = sim
+
+        # Add main_keyword if it was found in the keywords field
+        if addMainKeywordToSimMap == True:
+          result['semantic_similarity_scores'][args.main_keyword] = 1.0
+
 
         return jsonify(result)
 
