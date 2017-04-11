@@ -180,6 +180,10 @@ class Similarity_batch(Resource):
                 vecs['second_dic'][key] = key_obj.vector
 
 
+        second_unvectorized_keywords.extend(unvectorized_keywords)
+
+        second_unvectorized_keywords = list(set(second_unvectorized_keywords))
+
         result = { 'semantic_similarity_scores': {},
                    'main_keyword': args.main_keyword,
                    'fails': second_unvectorized_keywords
