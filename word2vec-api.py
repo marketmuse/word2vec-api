@@ -108,6 +108,22 @@ class Similarity_V2(Resource):
         return similarity
 
 
+class Get_vectors(Resource):
+    def post(self):
+      parser = reqparse.RequestParser()
+      parser.add_argument('keywords', type=str, action='append', required=True, help="keywwords must be a list of words!")
+      args = parser.parse_args()
+      result = {}
+      for key in args.keywords:
+        try:
+          result[key] = model[key].tolist()
+        except KeyError:
+          result[key] = None
+
+      return result
+
+
+
 class Similarity_batch(Resource):
     def post(self):
         parser = reqparse.RequestParser()
@@ -361,5 +377,6 @@ if __name__ == '__main__':
     api.add_resource(N_SimilarWords, path + '/n_most_similar')
     api.add_resource(Similarity_V2, path+'/similarity_v2')
     api.add_resource(Similarity_batch, path+'/similarity_batch')
+    api.add_resource(Get_vectors, path+'/vectors')
 
     app.run(host=host, port=port)
