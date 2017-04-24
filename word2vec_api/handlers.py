@@ -1,39 +1,50 @@
-'''
-Simple web service wrapping a Word2Vec as implemented in Gensim
-Example call: curl http://127.0.0.1:5000/wor2vec/n_similarity/ws1=Sushi&ws1=Shop&ws2=Japanese&ws2=Restaurant
-@TODO: Add more methods
-@TODO: Add command line parameter: path to the trained model
-@TODO: Add command line parameters: host and port
-'''
-
-from flask import Flask, request, jsonify
-from flask.ext.restful import Resource, Api, reqparse
-from gensim.models.word2vec import Word2Vec as w
+from flask.ext.restful import Resource, reqparse
+from flask import jsonify
+import logging
+import gensim
+from dictionary import Dictionary
+from IPython import embed
 from gensim import utils, matutils
 from numpy import exp, dot, zeros, outer, random, dtype, get_include, float32 as REAL,\
      uint32, seterr, array, uint8, vstack, argsort, fromstring, sqrt, newaxis, ndarray, empty, sum as np_sum
-import cPickle
-import argparse
-import base64
-import sys
-
-import gensim
-from gensim.models.wrappers import fasttext
-
-from IPython import embed
-
-# Proprietary classes
-from dictionary import Dictionary
-
-from werkzeug.exceptions import abort
 
 
-# Flask hotfix from here: https://github.com/pallets/flask/issues/941
-import flask
-from werkzeug.exceptions import default_exceptions
+# create different loggers
+formatter = logging.Formatter('%(message)s')
+
+failedKeywordLogger = logging.getLogger('failed_keywords')
+failedKeywordLoggerHandler = logging.FileHandler('/home/ubuntu/logs/failed_keywords.log', mode='w')
+failedKeywordLoggerHandler.setFormatter(formatter)
+failedKeywordLogger.setLevel(logging.DEBUG)
+failedKeywordLogger.addHandler(failedKeywordLoggerHandler)
+
+failedMainKeywordLogger = logging.getLogger('failed_main_keywords')
+failedMainKeywordLoggerHandler = logging.FileHandler('/home/ubuntu/logs/failed_main_keywords.log', mode='w')
+failedMainKeywordLoggerHandler.setFormatter(formatter)
+failedMainKeywordLogger.setLevel(logging.DEBUG)
+failedMainKeywordLogger.addHandler(failedMainKeywordLoggerHandler)
+
+
+# use for ative development, since the other models take over 20 min to load
+# model_path = '/home/ubuntu/data/models/glove.6B.50d.txt'
+# second_model = '/home/ubuntu/data/models/glove.6B.50d.txt'
+
+model_path = '/home/ubuntu/data/models/GoogleNews-vectors-negative300.bin'
+second_model = '/home/ubuntu/data/models/wiki.en.vec'
+
+
+model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=True)
+#model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=False) #dev
+# Load facebook model as fallback
+print 'loading facebook model...take a cup of coffee or two...really!'
+facebook_model = gensim.models.KeyedVectors.load_word2vec_format(second_model, binary=False)
+#facebook_model = gensim.models.KeyedVectors.load_word2vec_format(second_model, binary=False)  # dev
+
+
 
 
 parser = reqparse.RequestParser()
+
 
 class InvalidUsage(Exception):
     status_code = 400
@@ -178,6 +189,7 @@ class Similarity_batch(Resource):
           #raise InvalidUsage('No vector could be build for the main keyword: %s' % args.main_keyword, status_code=400)
           #raise werkzeug.exceptions.NotFound('nah')
           #abort(404)
+          failedMainKeywordLogger.debug(args.main_keyword)
           return ('', 204)
 
         vecs = {}
@@ -201,11 +213,10 @@ class Similarity_batch(Resource):
         second_unvectorized_keywords = list(set(second_unvectorized_keywords))
 
         result = { 'semantic_similarity_scores': {},
-                   'main_keyword': args.main_keyword,
-                   'fails': second_unvectorized_keywords
+                   'main_keyword': args.main_keyword
                  }
 
-        for dic, dic_data in vecs.iteritems():
+        for _, dic_data in vecs.iteritems():
           for key, vector in dic_data.iteritems():
             if key != args.main_keyword:
               sim = dot(matutils.unitvec(vector), matutils.unitvec(dic_data[args.main_keyword]))
@@ -216,7 +227,10 @@ class Similarity_batch(Resource):
           result['semantic_similarity_scores'][args.main_keyword] = 1.0
 
 
-        return jsonify(result)
+        for fail in second_unvectorized_keywords:
+          failedKeywordLogger.debug(fail)
+          result['semantic_similarity_scores'][fail] = 0.0
+        return result
 
 
 class N_Similarity(Resource):
@@ -280,103 +294,3 @@ class ModelWordSet(Resource):
         except Exception, e:
             print e
             return
-
-app = Flask(__name__)
-api = Api(app)
-
-
-#app.config['TRAP_HTTP_EXCEPTIONS']=True
-#
-#@app.errorhandler(Exception)
-#def handle_error(e):
-    #try:
-        #if e.code == 400:
-            #print '400 error code'
-            #response = jsonify(error.to_dict())
-            #response.status_code = error.status_code
-            #return response
-        #elif e.code == 404:
-            #return make_error_page("Page Not Found", "The page you're looking for was not found"), 404
-        #raise e
-    #except:
-        #print '500 error'
-        #return flask.Response.force_type(e, flask.request.environ)
-
-#@app.errorhandler(InvalidUsage)
-#def handle_invalid_usage(error):
-    #print 'inside handle_invalid_usage'
-    #response = jsonify(error.to_dict())
-    #response.status_code = error.status_code
-    #return response
-#
-#@app.errorhandler(404)
-#def pageNotFound(error):
-    #return "page not found"
-#
-#@app.errorhandler(500)
-#def raiseError(error):
-    #print 'inside raiseError'
-    #return error
-
-def _handle_http_exception(error):
-    print 'enters _handle_http_exception'
-    if flask.request.is_json:
-        return jsonify({
-            'status_code': error.code,
-            'message': str(error),
-            'description': error.description
-        }), error.code
-    raise error.get_response()
-
-
-# Flask fix: https://github.com/pallets/flask/issues/941
-for code, ex in default_exceptions.iteritems():
-    app.errorhandler(code)(_handle_http_exception)
-
-
-if __name__ == '__main__':
-    global model
-
-    #app.config['TRAP_HTTP_EXCEPTIONS']=True
-    #app.register_error_handler(Exception, defaultHandler)
-
-    #----------- Parsing Arguments ---------------
-    p = argparse.ArgumentParser()
-    p.add_argument("--model", help="Path to the trained model")
-    p.add_argument("--second_model", help="Path to the second trained model")
-    p.add_argument("--binary", help="Specifies the loaded model is binary")
-    p.add_argument("--host", help="Host name (default: localhost)")
-    p.add_argument("--port", help="Port (default: 5000)")
-    p.add_argument("--path", help="Path (default: /word2vec)")
-    args = p.parse_args()
-
-    model_path = args.model if args.model else "./model.bin.gz"
-    binary = True if args.binary else False
-    host = args.host if args.host else "localhost"
-    path = args.path if args.path else "/word2vec"
-    port = int(args.port) if args.port else 5000
-    if not args.model:
-        print "Usage: word2vec-apy.py --model path/to/the/model --second_model path/to/the/model [--host host --port 1234]"
-
-    if not args.second_model:
-        print "Usage: word2vec-apy.py --model path/to/the/model --second_model path/to/the/model [--host host --port 1234]"
-
-
-    model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=binary)
-    #model = gensim.models.KeyedVectors.load_word2vec_format(model_path, binary=False) #dev
-    # Load facebook model as fallback
-    print 'loading facebook model...take a cup of coffee or two...really!'
-    facebook_model = gensim.models.KeyedVectors.load_word2vec_format(args.second_model, binary=False)
-    #facebook_model = gensim.models.KeyedVectors.load_word2vec_format(args.second_model, binary=False)  # dev
-
-    api.add_resource(N_Similarity, path+'/n_similarity')
-    api.add_resource(Similarity, path+'/similarity')
-    api.add_resource(MostSimilar, path+'/most_similar')
-    api.add_resource(Model, path+'/model')
-    api.add_resource(ModelWordSet, '/word2vec/model_word_set')
-    api.add_resource(N_SimilarWords, path + '/n_most_similar')
-    api.add_resource(Similarity_V2, path+'/similarity_v2')
-    api.add_resource(Similarity_batch, path+'/similarity_batch')
-    api.add_resource(Get_vectors, path+'/vectors')
-
-    app.run(host=host, port=port)

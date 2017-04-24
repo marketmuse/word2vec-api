@@ -43,7 +43,7 @@ class Dictionary(Mapping):
 
     self.add_keywords(self.unique_keywords)
     self.vectorized_keywords_population = self.number_of_vectorized_keywords()
-    self.print_population_stats()
+    #self.print_population_stats()
 
 
   def __getitem__(self, keyword):
